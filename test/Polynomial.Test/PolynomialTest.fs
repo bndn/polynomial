@@ -8,55 +8,121 @@ open FsUnit.Xunit;
 [<Literal>]
 let EPSILON = 1.0e-6
 
-let closeToError f =
-    if (f > -0.0001 && f < 0.0001) then true else false
+// Pseudo code for chmutov
+let factorial x =
+    if x = 0 then 1 else
+    let rec fac_aux a acc =
+      if a >= x then
+        a * acc
+      else
+        fac_aux (a + 1) (a * acc)
+    fac_aux 1 x
+let comb a b =
+    let x = float (factorial a) in
+    let y = float (factorial b) in
+    let z = float (factorial (a - b)) in
+        x / (y * z)
+let rec strSum n f : string =
+    if n = 0 then
+        f 0
+    else
+        f n + " + " + (strSum (n - 1) f)
+let chmutov degree =
+    let T x = strSum (degree / 2) (fun (k : int) -> (string (comb degree (2 * k))) + " * (" + x + "^2 + -1.0)^" + (string k) + " * " + x + "^" + (string (degree - (2 * k))))
+    (T "x" + " + " + T "y" + " + " + T "z")
+
+let ex' = Expression.parse ("ox + t * dx")
+let ey' = Expression.parse ("oy + t * dy")
+let ez' = Expression.parse ("oz + t * dz")
 
 [<Fact>]
-let ``Simplification of multiplication`` () =
-    let p1 = (Expression.parse >> Polynomial.parse "t") "(2*x*y)*(x*z*4)"
-
-    match p1 with
-    | P(map) -> Map.find 0 map |> should equal ([[ANum 8.0; AExponent ("x",2); AExponent ("y",1); AExponent ("z",1)]])
-
-[<Fact>]
-let ``Simplification of division`` () =
-    let p1 = (Expression.parse >> Polynomial.parse "t") "(x^2*10)/(5*10/2)"
-    let p2 = (Expression.parse >> Polynomial.parse "t") "(x^2*y)/(x)"
-
-    // Issues
-    match p1 with
-    | P(map) -> Map.find 0 map |> should equal ([[ANum 0.4; AExponent ("x",2)]])
-
-    match p2 with
-    | P(map) -> Map.find 0 map |> should equal ([[AExponent ("x",1); AExponent ("y",1)]])
-
-[<Fact>]
-let ``Degree of polynomials`` () =
-    let ex' = Expression.parse ("ox + t * dx")
-    let ey' = Expression.parse ("oy + t * dy")
-    let ez' = Expression.parse ("oz + t * dz")
-
-    // 1st degree
-    let m1 = match (Polynomial.parse "t" (List.fold subst (Expression.parse "x") [("x",ex');("y",ey');("z",ez')])) with P(m) -> m
-    let m2 = match (Polynomial.parse "t" (List.fold subst (Expression.parse "y") [("x",ex');("y",ey');("z",ez')])) with P(m) -> m
-    let m3 = match (Polynomial.parse "t" (List.fold subst (Expression.parse "z") [("x",ex');("y",ey');("z",ez')])) with P(m) -> m
+let ``Degree of polynomials 1st`` () =
+    let m11 = match (Polynomial.parse "t" (List.fold subst (Expression.parse "x") [("x",ex');("y",ey');("z",ez')])) with P(m) -> m
+    let m12 = match (Polynomial.parse "t" (List.fold subst (Expression.parse "y") [("x",ex');("y",ey');("z",ez')])) with P(m) -> m
+    let m13 = match (Polynomial.parse "t" (List.fold subst (Expression.parse "z") [("x",ex');("y",ey');("z",ez')])) with P(m) -> m
 
     // Find highest degree in polynomial
-    m1 |> Map.toList |> List.maxBy fst |> fst |> should equal 1
-    m2 |> Map.toList |> List.maxBy fst |> fst |> should equal 1
-    m3 |> Map.toList |> List.maxBy fst |> fst |> should equal 1
+    m11 |> Map.toList |> List.maxBy fst |> fst |> should equal 1
+    m12 |> Map.toList |> List.maxBy fst |> fst |> should equal 1
+    m13 |> Map.toList |> List.maxBy fst |> fst |> should equal 1
 
-    // 2st degree
-    let m4 = match (Polynomial.parse "t" (List.fold subst (Expression.parse "x^2+y^2+z^2 - 0.5^2") [("x",ex');("y",ey');("z",ez')])) with P(m) -> m
-    let m5 = match (Polynomial.parse "t" (List.fold subst (Expression.parse "(x^2+y^2+z^2)_2 + -0.5") [("x",ex');("y",ey');("z",ez')])) with P(m) -> m
+[<Fact>]
+let ``Degree of polynomials 2nd`` () =
+    let m21 = match (Polynomial.parse "t" (List.fold subst (Expression.parse "x^2+y^2+z^2 - 0.5^2") [("x",ex');("y",ey');("z",ez')])) with P(m) -> m
+    let m22 = match (Polynomial.parse "t" (List.fold subst (Expression.parse "(x^2+y^2+z^2)_2 + -0.5") [("x",ex');("y",ey');("z",ez')])) with P(m) -> m
+    let m23 = match (Polynomial.parse "t" (List.fold subst (Expression.parse (chmutov 2)) [("x",ex');("y",ey');("z",ez')])) with P(m) -> m
 
-    m4 |> Map.toList |> List.maxBy fst |> fst |> should equal 2
-    m5 |> Map.toList |> List.maxBy fst |> fst |> should equal 2
+    m21 |> Map.toList |> List.maxBy fst |> fst |> should equal 2
+    m22 |> Map.toList |> List.maxBy fst |> fst |> should equal 2
+    m23 |> Map.toList |> List.maxBy fst |> fst |> should equal 2
 
-    // 4th degree
-    let m6 = match (Polynomial.parse "t" (List.fold subst (Expression.parse "(((x^2 + y^2)_2 + -1.5)^2 + z^2)_2 + -0.5") [("x",ex');("y",ey');("z",ez')])) with P(m) -> m
+[<Fact>]
+let ``Degree of polynomials 3rd`` () =
+    let m31 = match (Polynomial.parse "t" (List.fold subst (Expression.parse (chmutov 3)) [("x",ex');("y",ey');("z",ez')])) with P(m) -> m
 
-    m6 |> Map.toList |> List.maxBy fst |> fst |> should equal 4
+    m31 |> Map.toList |> List.maxBy fst |> fst |> should equal 3
+
+[<Fact>]
+let ``Degree of polynomials 4th`` () =
+    let r = 0.5
+    let R = 1.5
+    let eq = let rs1 = "(" + (string R) + "^2" + " + " + (string r) + "^2)"
+             let rs2 = "(" + (string R) + "^2" + " - " + (string r) + "^2)"
+             let sx = "x^4 + 2x^2*y^2 + 2x^2*z^2 - 2*" + rs1 + "*x^2"
+             let sy = "y^4 + 2y^2*z^2 + 2*" + rs2 + "*y^2"
+             let sz = "z^4 - 2*" + rs1 + "*z^2"
+             let sc = rs2 + "^2"
+             sx + " + " + sy + " + " + sz + " + " + sc
+
+    let m41 = match (Polynomial.parse "t" (List.fold subst (Expression.parse "(((x^2 + y^2)_2 + -1.5)^2 + z^2)_2 + -0.5") [("x",ex');("y",ey');("z",ez')])) with P(m) -> m
+    let m42 = match (Polynomial.parse "t" (List.fold subst (Expression.parse eq) [("x",ex');("y",ey');("z",ez')])) with P(m) -> m
+    let m43 = match (Polynomial.parse "t" (List.fold subst (Expression.parse ("(((x^2 + y^2)_2 + -" + (string R) + ")^2 + z^2)_2 + -" + (string r))) [("x",ex');("y",ey');("z",ez')])) with P(m) -> m
+    let m44 = match (Polynomial.parse "t" (List.fold subst (Expression.parse (chmutov 4)) [("x",ex');("y",ey');("z",ez')])) with P(m) -> m
+    let m45 = match (Polynomial.parse "t" (List.fold subst (Expression.parse "(x - 2)^2(x+2)^2 + (y - 2)^2(y+2)^2 + (z - 2)^2(z+2)^2 + 3(x^2*y^2 + x^2z^2 + y^2z^2) + 6x y z - 10(x^2 + y^2 + z^2) + 22") [("x",ex');("y",ey');("z",ez')])) with P(m) -> m
+
+    m41 |> Map.toList |> List.maxBy fst |> fst |> should equal 4
+    m42 |> Map.toList |> List.maxBy fst |> fst |> should equal 4
+    m43 |> Map.toList |> List.maxBy fst |> fst |> should equal 4
+    m44 |> Map.toList |> List.maxBy fst |> fst |> should equal 4
+    m45 |> Map.toList |> List.maxBy fst |> fst |> should equal 4
+
+[<Fact>]
+let ``Degree of polynomials 5th`` () =
+    let m51 = match (Polynomial.parse "t" (List.fold subst (Expression.parse (chmutov 5)) [("x",ex');("y",ey');("z",ez')])) with P(m) -> m
+
+    m51 |> Map.toList |> List.maxBy fst |> fst |> should equal 5
+
+[<Fact>]
+let ``Degree of polynomials 6th`` () =
+    let m61 = match (Polynomial.parse "t" (List.fold subst (Expression.parse (chmutov 6)) [("x",ex');("y",ey');("z",ez')])) with P(m) -> m
+    let m62 = match (Polynomial.parse "t" (List.fold subst (Expression.parse "(x^2 + (4.0/9.0)*y^2 + z^2 - 1)^3 - x^2 * z^3 - (9.0/80.0)*y^2*z^3") [("x",ex');("y",ey');("z",ez')])) with P(m) -> m
+
+    m61 |> Map.toList |> List.maxBy fst |> fst |> should equal 6
+    m62 |> Map.toList |> List.maxBy fst |> fst |> should equal 6
+
+[<Fact>]
+let ``Degree of polynomials 7th`` () =
+    let m71 = match (Polynomial.parse "t" (List.fold subst (Expression.parse (chmutov 7)) [("x",ex');("y",ey');("z",ez')])) with P(m) -> m
+
+    m71 |> Map.toList |> List.maxBy fst |> fst |> should equal 7
+
+[<Fact>]
+let ``Degree of polynomials 8th`` () =
+    let m81 = match (Polynomial.parse "t" (List.fold subst (Expression.parse (chmutov 8)) [("x",ex');("y",ey');("z",ez')])) with P(m) -> m
+
+    m81 |> Map.toList |> List.maxBy fst |> fst |> should equal 8
+
+[<Fact>]
+let ``Degree of polynomials 9th`` () =
+    let m91 = match (Polynomial.parse "t" (List.fold subst (Expression.parse (chmutov 9)) [("x",ex');("y",ey');("z",ez')])) with P(m) -> m
+
+    m91 |> Map.toList |> List.maxBy fst |> fst |> should equal 9
+
+[<Fact>]
+let ``Degree of polynomials 10th`` () =
+    let m101 = match (Polynomial.parse "t" (List.fold subst (Expression.parse (chmutov 10)) [("x",ex');("y",ey');("z",ez')])) with P(m) -> m
+
+    m101 |> Map.toList |> List.maxBy fst |> fst |> should equal 10
 
 [<Fact>]
 let ``Evaluate atom group`` () =
@@ -210,6 +276,10 @@ let ``Multiple variables and combination of rules`` () =
     // Online calc: (((x^2 + y^2)^(1/2) + -1.5)^2 + z^2)^(1/2) + -0.5 -> x*(sqrt(x^2+y^2)-3/2)/(sqrt(x^2+y^2)*sqrt((sqrt(x^2+y^2)-3/2)^2+z^2))
     let expected = 0.39529229591
     (((Polynomial.evaluateExpr valueMap d3) - expected) > -EPSILON && ((Polynomial.evaluateExpr valueMap d3) - expected) < EPSILON) |> should equal true
+
+// Check for a zero value close within the accuracy that sturm sequence uses
+let closeToError f =
+    if (f > -0.0001 && f < 0.0001) then true else false
 
 [<Fact>]
 let ``Sturm sequence finding roots`` () =

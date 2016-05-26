@@ -18,14 +18,14 @@ type Poly = P of Map<int, SimpleExpr>
 let hasRoot e =
     let rec hr et c =
         match et with
-        | FNum x                  -> c ([])
-        | FVar x                  -> c ([])
+        | FNum _                  -> c ([])
+        | FVar _                  -> c ([])
         | FAdd(e1, e2)            -> hr e1 (fun ex1 -> hr e2 (fun ex2 -> c (ex1 @ ex2)))
         | FSub(e1, e2)            -> hr e1 (fun ex1 -> hr e2 (fun ex2 -> c (ex1 @ ex2)))
         | FMult(e1, e2)           -> hr e1 (fun ex1 -> hr e2 (fun ex2 -> c (ex1 @ ex2)))
         | FDiv(e1, e2)            -> hr e1 (fun ex1 -> hr e2 (fun ex2 -> c (ex1 @ ex2)))
-        | FExponent(e1, n)        -> hr e1 c
-        | FRoot(e1, n) when n > 1 -> c ([1])
+        | FExponent(e1, _)        -> hr e1 c
+        | FRoot(_, n) when n > 1 -> c ([1])
         | _                       -> []
     not (List.isEmpty (hr e id))
 
@@ -41,7 +41,7 @@ let hasRoot e =
 let findMul al =
     let rec fm a1 a2 =
         match a2 with
-        | ((AAdd | ASub) as op) :: alt -> (a1, a2)
+        | (AAdd | ASub) :: _ -> (a1, a2)
         | op :: alt -> fm (a1 @ [op]) alt
         | [] -> (a1, a2)
     fm [] al
@@ -56,7 +56,7 @@ let findMul al =
 /// </returns>
 let rec hasSum al =
     match al with
-    | (AAdd | ASub) :: alt -> true
+    | (AAdd | ASub) :: _ -> true
     | _ :: alt -> hasSum alt
     | []                   -> false
 
@@ -70,7 +70,7 @@ let rec hasSum al =
 let findGroup al =
     let rec fg al1 al2 =
         match al2 with
-        | ((AAdd | ASub) as op) :: alt -> (al1, alt)
+        | (AAdd | ASub) :: alt -> (al1, alt)
         | op :: alt -> fg (al1 @ [op]) alt
         | [] -> (al1, [])
     fg [] al
@@ -104,10 +104,10 @@ let hasVar e k =
         | FMult(e1, e2)     -> hv e1 (fun ex1 -> hv e2 (fun ex2 -> c(ex1 @ ex2)))
         | FSub(e1, e2)      -> hv e1 (fun ex1 -> hv e2 (fun ex2 -> c(ex1 @ ex2)))
         | FDiv(e1, e2)      -> hv e1 (fun ex1 -> hv e2 (fun ex2 -> c(ex1 @ ex2)))
-        | FExponent(e1, n)  -> hv e1 c
-        | FRoot(e1, n)      -> hv e1 c
+        | FExponent(e1, _)  -> hv e1 c
+        | FRoot(e1, _)      -> hv e1 c
         | FVar x            -> if x = k then c ([1]) else c ([])
-        | FNum x            -> c ([])
+        | FNum _            -> c ([])
     not (List.isEmpty (hv e id))
 
 /// <summary>
@@ -130,10 +130,10 @@ let getFirstLevelExpr e =
         | FMult(_, _) as e1     -> if sub then c ([FMult(FNum -1.0, e1)]) else c ([e1])
         | FDiv(_, _) as e1      -> if sub then c ([FMult(FNum -1.0, e1)]) else c ([e1])
         | FRoot(e1, 1)          -> if sub then c ([FMult(FNum -1.0, e1)]) else c ([e1])
-        | FRoot(_, n) as e1     -> if sub then c ([FMult(FNum -1.0, e1)]) else c ([e1])
+        | FRoot(_, _) as e1     -> if sub then c ([FMult(FNum -1.0, e1)]) else c ([e1])
         | FExponent(_, 0)       -> if sub then c ([FNum -1.0]) else c ([FNum 1.0])
         | FExponent(e1, 1)      -> if sub then c ([FMult(FNum -1.0, e1)]) else c ([e1])
-        | FExponent(_, n) as e1 -> if sub then c ([FMult(FNum -1.0, e1)]) else c ([e1])
+        | FExponent(_, _) as e1 -> if sub then c ([FMult(FNum -1.0, e1)]) else c ([e1])
         | FNum x as e1          -> if sub then c ([FNum (-1.0 * x)]) else c ([e1])
         | FVar _ as e1          -> if sub then c ([FMult(FNum -1.0, e1)]) else c ([e1])
     gfle e false id
@@ -155,6 +155,7 @@ let simplifyExprList el n =
             if e1 = e2 then c ([FMult(e1, e2)])
             elif e1 > e2 then c ([FMult(e1, e2)])
             else c ([FMult(e2, e1)])
+        | _             -> failwith "Invalid expression in remove root"
     let exprList = List.fold (fun acc elem -> (sel elem id) @ acc) [] el
     let rec consMap etl m =
         match etl with
@@ -171,8 +172,10 @@ let simplifyExprList el n =
             | FRoot(ee1, nn) when nn = n -> ee1
             | _ when v > 1               -> FMult(k, FNum (float v))
             | _ when v = 1               -> k
+            | _                          -> failwith "Invalid expression in remove root"
         | _ when v > 1               -> FMult(k, FNum (float v))
         | _ when v = 1               -> k
+        | _                          -> failwith "Invalid expression in remove root"
 
     let addExpr el1 =
         let rec ae ((etl:Expr list), (e2:Expr)) =
@@ -195,13 +198,14 @@ let simplifyExprList el n =
 let rec combineExprList e1 e2 n nth nref =
     let rec combExprExpr (et1, et2) c =
         match et2 with
-        | eh :: [] -> c (FMult(et1, eh))
+        | eh :: []  -> c (FMult(et1, eh))
         | eh :: elt ->
             combExprExpr (et1, [eh]) (fun ex1 ->
                 combExprExpr (et1, elt) (fun ex2 ->
                     c (FAdd(ex1, ex2))
                 )
             )
+        | _        -> failwith "Invalid expression in remove root"
     if n > 2 then combineExprList (List.fold (fun acc elem -> (combExprExpr (elem, e2) id) :: acc) [] e1) e2 (n - 1) nth nref
              else List.fold (fun acc elem -> (combExprExpr (elem, e2) id) :: acc) [] e1
 
@@ -215,7 +219,7 @@ let combineExpr e n =
     let rootDetail e =
         let rec rd et (nth, count) =
             match et with
-            | FRoot(e1, n) :: el -> rd el (n, count + 1)
+            | FRoot(_, n) :: el -> rd el (n, count + 1)
             | [] -> (nth, count)
             | _ :: el -> rd el (nth, count)
         rd e (0, 0)
@@ -303,18 +307,19 @@ let removeSub e =
 
     let rec rse et c =
         match et with
-        | FNum x as e1              -> c (e1)
-        | FVar x as e1              -> c (e1)
+        | FNum _ as e1              -> c (e1)
+        | FVar _ as e1              -> c (e1)
         | FAdd(e1, e2)              -> rse e1 (fun ex1 -> rse e2 (fun ex2 -> c (FAdd(ex1, ex2))))
         | FSub(e1, e2)              -> rse e1 (fun ex1 -> c (FAdd (ex1, negNum e2)))
         | FMult(e1, e2)             -> rse e1 (fun ex1 -> rse e2 (fun ex2 -> c (FMult(ex1, ex2))))
         | FDiv(e1, e2)              -> rse e1 (fun ex1 -> rse e2 (fun ex2 -> c (FDiv(ex1, ex2))))
-        | FExponent(e1, 0)          -> c (FNum 1.0)
+        | FExponent(_, 0)          -> c (FNum 1.0)
         | FExponent(e1, 1)          -> rse e1 c
         | FExponent(e1, n)          -> rse e1 (fun ex1 -> c (FExponent(ex1, n)))
-        | FRoot(e1, 0)              -> failwith "0th root not allowed in expression"
+        | FRoot(_, 0)              -> failwith "0th root not allowed in expression"
         | FRoot(e1, 1)              -> rse e1 c
         | FRoot(e1, n) when n > 1   -> rse e1 (fun ex1 -> c (FRoot(ex1, n)))
+        | _                         -> failwith "Invalid expression in remove subtraction"
     rse e id
 
 /// <summary>
@@ -353,7 +358,8 @@ let removeRoot e =
         | FExponent(e1, 1) -> rr (e1, rs)
         | FExponent(e1, n) when n < 0 -> rr ((FDiv(FNum 1.0, FExponent(e1, n * -1))), rs)
         | FExponent(e1, 2) -> rr((combineExpr e1 2), rs)
-        | FExponent(e1, n) -> failwith "Removing root contained in an exponent higher than 2 is not supported"
+        | FExponent(_, _)  -> failwith "Removing root contained in an exponent higher than 2 is not supported"
+        | _                -> failwith "Invalid expression in remove root"
     if hasRoot e then rr (e, FNum 0.0) else e
 
 /// <summary>
@@ -477,12 +483,12 @@ let simplify e =
         | FExponent(e1, n) when n < 0 -> sim (FDiv(FNum 1.0, FExponent(e1, n * -1))) c
         | FExponent(e1, n)            -> sim (FMult(e1, FExponent(e1, n - 1))) c
         | FAdd(e1, e2)                -> sim e1 (fun al1 -> sim e2 (fun al2 -> c (al1 @ (AAdd :: al2))))
-        | FSub(e1, e2)                -> failwith "Subtraction shouldn't be present"
+        | FSub(_, _)                -> failwith "Subtraction shouldn't be present"
         | FMult(e1, e2)               -> sim e1 (fun al1 -> sim e2 (fun al2 -> c (segregateRight al1 al2 AMul)))
         | FDiv(e1, e2)                -> sim e1 (fun al1 -> sim e2 (fun al2 -> c (combineDiv al1 al2)))
-        | FRoot(e1, 0)                -> failwith "0th root is not allowed in expressions"
+        | FRoot(_, 0)                -> failwith "0th root is not allowed in expressions"
         | FRoot(e1, 1)                -> sim e1 c
-        | FRoot(e1, n)                -> failwith "Roots shouldn't be present"
+        | FRoot(_, _)                -> failwith "Roots shouldn't be present"
     sim e id
 
 /// <summary>
@@ -506,10 +512,10 @@ let separateAtomGroup al =
 let simplifyAtomGroup ag =
     let rec sag al s m =
         match al with
-        | AMul :: ANum x :: alt when x = 0.  -> (0.0, Map.empty)
+        | AMul :: ANum x :: _ when x = 0.  -> (0.0, Map.empty)
         | AMul :: ANum x :: alt              -> sag alt (s * x) m
         | ADiv :: ANum x :: alt              -> if not(x = 0.) then sag alt (s / x) m else failwith "Can't divide by 0"
-        | ANum x :: alt when x = 0.          -> (0.0, Map.empty)
+        | ANum x :: _ when x = 0.          -> (0.0, Map.empty)
         | ANum x :: alt                      -> sag alt (s * x) m
         | AMul :: AExponent (x, n) :: alt    -> sag alt (s) (Map.add x (if Map.containsKey x m then m.[x] + n else n) m)
         | ADiv :: AExponent (x, n) :: alt    -> sag alt (s) (Map.add x (if Map.containsKey x m then m.[x] - n else -1 * n) m)
@@ -521,7 +527,7 @@ let simplifyAtomGroup ag =
     let u m = Map.fold (fun a x n -> a @ [AExponent(x, n)]) [] m
 
     match (sum, map) with
-    | (0.0, m) -> [ANum 0.0]
+    | (0.0, _) -> [ANum 0.0]
     | (1.0, m) -> u m
     | (s,   m) -> ANum s :: u m
 
@@ -560,7 +566,6 @@ let splitAtomGroup v m = function
         match List.tryFind isV ag with
         | Some (AExponent(_, d)) -> addMap d (List.filter (not << isV) ag) m
         | _                      -> addMap 0 ag m
-    | [] -> m
 
 /// <summary>
 /// Convert an expression to a simplified simple expression.
@@ -605,21 +610,22 @@ let derivative k e =
             | true, true   -> de e1 dx (fun ex1 -> de e2 dx (fun ex2 -> c (FAdd(FMult(ex1, e2), FMult(e1, ex2)))))
             | false, false -> c (FNum 0.0)
         | FSub(e1, e2)                  -> de e1 dx (fun ex1 -> de e2 dx (fun ex2 ->
-            c (FSub((if hasVar e1 k then ex1 else FNum 0.0), (if hasVar e2 k then ex2 else FNum 0.0)))))
+                                               c (FSub((if hasVar e1 k then ex1 else FNum 0.0), (if hasVar e2 k then ex2 else FNum 0.0)))))
         | FDiv(e1, e2)                  -> de e1 true (fun ex1 -> de e2 true (fun ex2 ->
-            c (FDiv(FSub(FMult(ex1, e2), FMult(ex2, e1)), FExponent(e2, 2)))))
-        | FExponent(e1, 0)              -> c (FNum 0.0)
+                                               c (FDiv(FSub(FMult(ex1, e2), FMult(ex2, e1)), FExponent(e2, 2)))))
+        | FExponent(_, 0)              -> c (FNum 0.0)
         | FExponent(e1, 1)              -> de e1 dx c
         | FExponent(e1, n) when n < 0   -> de (FDiv(FNum 1.0, FExponent(e1, n * -1))) dx c
         | FExponent(e1, n)              -> if hasVar e1 k then de e1 true (fun ex1 ->
-            c (FMult(FMult(FNum (float n), FExponent(e1, n - 1)), ex1))) else c (FNum 0.0)
-        | FRoot(e1, 0)                  -> failwith "Derivative of 0th root not allowed"
-        | FRoot(e1, n) when n < 0       -> failwith "Derivative of negative root is not supported"
+                                               c (FMult(FMult(FNum (float n), FExponent(e1, n - 1)), ex1))) else c (FNum 0.0)
+        | FRoot(_, 0)                  -> failwith "Derivative of 0th root not allowed"
+        | FRoot(_, n) when n < 0       -> failwith "Derivative of negative root is not supported"
         | FRoot(e1, 1)                  -> de e1 dx c
         | FRoot(e1, n) when n > 0       -> de e1 true (fun ex1 ->
             c (FMult(FDiv(FNum 1.0, FMult(FNum (float n), FExponent(FRoot(e1, n), n - 1))), ex1)))
         | FVar x                        -> if dx && x = k then c (FNum 1.0) elif x = k then c (FVar x) else c (FNum 0.0)
         | FNum x                        -> if dx then c (FNum 0.0) else c (FNum x)
+        | _                             -> failwith "Invalid expression in derivative"
     de e true id
 
 /// <summary>
@@ -726,10 +732,10 @@ let findRoots maxInterval minInterval error poly =
             match farRoots with
             | 0                   -> []
             | 1                   -> if farDiff < err then [minI + farDiff/2.] else fr poly derivative maxI newMin err
-            | n when error > diff -> [minI + (farDiff/2.)]
+            | _ when error > diff -> [minI + (farDiff/2.)]
             | _                   -> fr p d maxI newMin err
         | 1                   -> if closeDiff < err then [minI + closeDiff/2.] else fr poly derivative newMax minI err
-        | n when error > diff -> [minI + (diff/2.)]
+        | _ when error > diff -> [minI + (diff/2.)]
         | _                   -> fr p d newMax minI err
     fr poly derivative maxInterval minInterval error
 
