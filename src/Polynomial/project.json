@@ -1,7 +1,10 @@
 {
     "version": "0.0.0",
-    "description": "",
+    "description": "A library for converting abstract syntax trees into polynomials",
     "authors": [
+        "Mathias Grundtvig Andreasen <mgru@itu.dk>",
+        "Markus Thomsen <matho@itu.dk>",
+        "Kasper Kronborg Isager <kasi@itu.dk>"
     ],
     "tags": [
     ],
@@ -9,6 +12,7 @@
     "licenseUrl": "https://github.itu.dk/bndn/polynomial/blob/master/LICENSE.md",
 
     "dependencies": {
+        "Expression": "",
         "FSharp.Dnx": {
             "type": "build",
             "version": "1.0.0-*"
@@ -30,7 +34,8 @@
     },
     "fsharp": {
         "files": [
-            "Program.fs"
+            "Polynomial.fsi",
+            "Polynomial.fs"
         ]
     }
 }
